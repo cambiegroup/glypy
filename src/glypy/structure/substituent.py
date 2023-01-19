@@ -235,7 +235,7 @@ class Substituent(SubstituentBase):
         return hash((self.id, self.name))
 
     def __eq__(self, other):
-      return (other is not None) and (self.name == other.name) and (self.composition == other.composition)
+        return (other is not None) and (self.name == other.name) and (self.composition == other.composition)
 
     def __ne__(self, other):
         return not self == other
