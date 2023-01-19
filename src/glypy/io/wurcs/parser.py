@@ -1,4 +1,5 @@
 import re
+
 try:
     from urllib import unquote
 except ImportError:
@@ -16,7 +17,7 @@ class WURCSParser(object):
     def __init__(self, line, structure_class=glycan.Glycan):
         self.line = unquote(line)
         self.structure_class = structure_class
-        self.version = self.parse_version()
+        self.version = None
         self.node_type_count = None
         self.node_count = None
         self.edge_count = None
@@ -25,46 +26,16 @@ class WURCSParser(object):
         self.glyph_to_node_index = {}
         self.has_uncertain_linkages = False
 
-    def extract_sections(self):
-        version_section, count_section, rest = self.line.split("/", 2)
-        node_type_section, rest = rest.split("]/")
-        node_type_section += ']'
-        parts = rest.split("/", 1)
-        node_index_to_type_section = parts[0]
-        if len(parts) == 2:
-            rest = parts[1]
-        else:
-            rest = ''
-        node_linkage_section = rest
-        return (count_section, node_type_section, node_index_to_type_section, node_linkage_section)
-
-    def parse_version(self, section=None):
-        if section is None:
-            section = self.line.split("/", 1)[0]
-        number = float(section.split("=")[1])
-        return number
-
-    def parse_counts(self, section=None):
-        if section is None:
-            section = self.line.split("/", 2)[1]
-        if "+" in section:
-            self.has_uncertain_linkages = True
-        counts = (
-            self.node_type_count, self.node_count,
-            self.edge_count) = list(map(lambda x: int(x.replace("+", "")), section.split(",")))
-        return counts
-
-    def parse_node_type_section(self, section=None):
-        if section is None:
-            section = self.line.split("/", 2)[2].split("]/")[0] + ']'
-        node_types = [s[:-1] for s in section.split("[")[1:]]
+    def parse_node_type_section(self, section):
+        # Extract UniqueRES list
+        # a2122h-1x_1-5_2*NCC/3=O][a2122h-1b_1-5_2*NCC/3=O][a1122h-1b_1-5][a1122h-1a_1-5][a2112h-1b_1-5_2*NCC/3=O][a2112h-1b_1-5][a1221m-1a_1-5
+        # Split by "]["
+        node_types = section.split("][")
         for i, node_type in enumerate(node_types, 1):
             self.node_type_map[i] = NodeTypeSpec.parse(node_type, self.version)
         return self.node_type_map
 
-    def parse_node_index_to_type_section(self, section=None):
-        if section is None:
-            section = self.extract_sections()[2]
+    def parse_node_index_to_type_section(self, section):
         for i, index in enumerate(map(int, section.split('-'))):
             alpha = base52(i)
             mono = self.node_type_map[index].to_monosaccharide()
@@ -75,9 +46,10 @@ class WURCSParser(object):
 
     parse_connection = re.compile(r"([a-zA-Z]+)([0-9]+|\?)")
 
-    def parse_connectivity_map(self, section=None):
-        if section is None:
-            section = self.extract_sections()[3]
+    def parse_connectivity_map(self, section):
+        if not section:
+            return False
+
         if "{" in section or "}" in section:
             links = section.split("_")
             if len(links) > 1 and len(set(links)) == 1:
@@ -141,16 +113,35 @@ class WURCSParser(object):
         return gc
 
     def parse(self):
-        (count_section, node_type_section, node_index_to_type_section, node_linkage_section) = self.extract_sections()
-        self.parse_counts(count_section)
-        self.parse_node_type_section(node_type_section)
-        self.parse_node_index_to_type_section(node_index_to_type_section)
-        if node_linkage_section:
-            if self.parse_connectivity_map(node_linkage_section):
-                return self.structure_class(root=self.node_index_to_node[0], index_method='dfs', canonicalize=True)
-            return self._to_composition()
-        else:
-            return self._to_composition()
+        # RegEx from WURCS Framework (java).
+        # Permalink https://gitlab.com/glycoinfo/wurcsframework/-/blob/c2f50bd8c330d4d0d5b03c1a3d4d32169dd19ac2/src/main/java/org/glycoinfo/WURCSFramework/util/array/WURCSImporter.java#L62
+
+        # String strExp = "WURCS=(.+)/(\\d+),(\\d+),(\\d+)(\\+)?/\\[(.+)\\]/([\\d\\-<>]+)/(.*)";
+
+        # WURCS=2.0/7,10,9/[a2122h-1x_1-5_2*NCC/3=O][a2122h-1b_1-5_2*NCC/3=O][a1122h-1b_1-5][a1122h-1a_1-5][a2112h-1b_1-5_2*NCC/3=O][a2112h-1b_1-5][a1221m-1a_1-5]/1-2-3-4-2-5-4-2-6-7/a4-b1_a6-j1_b4-c1_d2-e1_e4-f1_g2-h1_h4-i1_d1-c3|c6_g1-c3|c6
+        # group(0)	WURCS=2.0/7,10,9/[a2122h-1x_1-5_2*NCC/3=O][a2122h-1b_1-5_2*NCC/3=O][a1122h-1b_1-5][a1122h-1a_1-5][a2112h-1b_1-5_2*NCC/3=O][a2112h-1b_1-5][a1221m-1a_1-5]/1-2-3-4-2-5-4-2-6-7/a4-b1_a6-j1_b4-c1_d2-e1_e4-f1_g2-h1_h4-i1_d1-c3|c6_g1-c3|c6
+        # group(1)	2.0
+        # group(2)	7
+        # group(3)	10
+        # group(4)	9
+        # group(5)	""
+        # group(6)	a2122h-1x_1-5_2*NCC/3=O][a2122h-1b_1-5_2*NCC/3=O][a1122h-1b_1-5][a1122h-1a_1-5][a2112h-1b_1-5_2*NCC/3=O][a2112h-1b_1-5][a1221m-1a_1-5
+        # group(7)	1-2-3-4-2-5-4-2-6-7
+        # group(8)	a4-b1_a6-j1_b4-c1_d2-e1_e4-f1_g2-h1_h4-i1_d1-c3|c6_g1-c3|c6
+
+        pattern = re.compile(r"WURCS=(.+)/(\d+),(\d+),(\d+)(\+)?/\[(.+)]/([\d\-<>]+)/(.*)")
+        wurcs_match = pattern.search(self.line)
+        self.version = float(wurcs_match.group(1))
+        self.node_type_count = wurcs_match.group(2)
+        self.node_count = wurcs_match.group(3)
+        self.edge_count = wurcs_match.group(4)
+        self.has_uncertain_linkages = wurcs_match.group(5) == "+"
+        self.parse_node_type_section(wurcs_match.group(6))
+        self.parse_node_index_to_type_section(wurcs_match.group(7))
+
+        if self.parse_connectivity_map(wurcs_match.group(8)):
+            return self.structure_class(root=self.node_index_to_node[0], index_method='dfs', canonicalize=True)
+        return self._to_composition()
 
 
 def loads(text, structure_class=glycan.Glycan):

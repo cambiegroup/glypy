@@ -188,8 +188,6 @@ class TestWURCS(unittest.TestCase):
         text = wurcs.dumps(gc)
         parser = wurcs.parser.WURCSParser(text)
         test = parser.parse()
-        counts = parser.parse_counts()
-        self.assertEqual(counts[-1], 0)
         self.assertEqual(gc, test)
         self.assertAlmostEqual(gc.mass(), test.mass())
 

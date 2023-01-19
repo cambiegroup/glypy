@@ -727,7 +727,7 @@ class Glycan(SaccharideCollection):
         """Canonicalize this glycan, sorting the order in which its links from the
         same monosaccharide are traversed.
 
-        This currently uses the the :title-reference:`GlycoCT` canonicalization
+        This currently uses the :title-reference:`GlycoCT` canonicalization
         algorithm.
 
         Parameters
@@ -1010,10 +1010,7 @@ class Glycan(SaccharideCollection):
         -------
         int
         '''
-        count = 0
-        for node in self.depth_first_traversal():
-            count += 1
-        return count
+        return sum(1 for _ in self.depth_first_traversal())
 
     def __len__(self):
         return self.order()

@@ -102,9 +102,7 @@ class WURCSWriter(object):
     def write(self):
         self.extract_node_types()
         sections = [self.format_version(), self.format_count_section(), self.format_node_types(),
-                    self.format_node_type_index(), ]
-        if not isinstance(self.glycan, GlycanComposition):
-            sections.append(self.format_links())
+                    self.format_node_type_index(), self.format_links()]
         return '/'.join(sections)
 
 
